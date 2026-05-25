@@ -1,0 +1,35 @@
+# Core
+python-dotenv>=1.0.0
+ccxt>=4.2.0
+
+# AI Providers (use either one)
+anthropic>=0.18.0
+openai>=1.12.0
+google-generativeai>=0.7.2
+
+# Database
+SQLAlchemy>=2.0.0
+psycopg[binary]>=3.1.0
+alembic>=1.13.0
+
+# API & WebSocket
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+websockets>=12.0
+
+# Technical Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Scheduler
+APScheduler>=3.10.0
+
+# News APIs
+requests>=2.31.0
+
+# Telegram
+python-telegram-bot>=20.7
+
+# Utilities
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
