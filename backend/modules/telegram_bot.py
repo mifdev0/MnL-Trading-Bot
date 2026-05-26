@@ -2,6 +2,7 @@
 Telegram Bot - Interactive bot for monitoring and control
 """
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import settings
