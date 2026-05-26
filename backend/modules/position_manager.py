@@ -60,10 +60,18 @@ class PositionManager:
             logger.debug(f"Skipping simulated order cancel: {order_id}")
             return
 
-        if settings.BINANCE_TESTNET:
-            self.futures_client.cancel_order(symbol, order_id)
-        else:
-            self.exchange.cancel_order(order_id, symbol)
+        try:
+            if settings.BINANCE_TESTNET:
+                self.futures_client.cancel_order(symbol, order_id)
+            else:
+                self.exchange.cancel_order(order_id, symbol)
+        except Exception as e:
+            # If order is already canceled or not found, it's fine
+            error_msg = str(e).lower()
+            if "not found" in error_msg or "-2011" in error_msg or "already canceled" in error_msg:
+                logger.debug(f"Order {order_id} already canceled or not found on exchange")
+            else:
+                raise e
 
     def _create_managed_order(self, position: Position, order_kind: str, **kwargs) -> dict:
         if self._has_simulated_orders(position):

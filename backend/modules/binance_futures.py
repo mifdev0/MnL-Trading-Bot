@@ -74,8 +74,14 @@ class BinanceFuturesClient:
         if response.status_code >= 400:
             raise RuntimeError(f"Binance {method} {path} failed: {response.status_code} {payload}")
 
-        if isinstance(payload, dict) and payload.get("code", 0) < 0:
-            raise RuntimeError(f"Binance {method} {path} failed: {payload}")
+        if isinstance(payload, dict):
+            code = payload.get("code")
+            if code is not None:
+                try:
+                    if int(code) < 0:
+                        raise RuntimeError(f"Binance {method} {path} failed: {payload}")
+                except (ValueError, TypeError):
+                    pass
 
         return payload
 

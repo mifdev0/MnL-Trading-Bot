@@ -510,19 +510,28 @@ Rule: Signal LONG/SHORT only if confidence >= 70.
     
     def analyze_multiple_pairs(self, pairs: List[str]) -> List[Dict]:
         """
-        Analyze multiple pairs and generate signals
+        Analyze multiple pairs and generate signals in parallel
         """
-        signals = []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        for pair in pairs:
-            try:
-                signal = self.generate_signal(pair)
-                if signal:
-                    signals.append(signal)
-                    logger.info(f"{pair}: {signal['signal']} (confidence: {signal['confidence']}%)")
-            except Exception as e:
-                logger.error(f"Error analyzing {pair}: {e}")
-                continue
+        signals = []
+        max_workers = min(len(pairs), 10) # Limit concurrent calls to 10
+        
+        logger.info(f"Analyzing {len(pairs)} pairs in parallel (max_workers={max_workers})...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_pair = {executor.submit(self.generate_signal, pair): pair for pair in pairs}
+            
+            for future in as_completed(future_to_pair):
+                pair = future_to_pair[future]
+                try:
+                    signal = future.result()
+                    if signal:
+                        signals.append(signal)
+                        logger.info(f"{pair}: {signal['signal']} (confidence: {signal['confidence']}%)")
+                except Exception as e:
+                    logger.error(f"Error analyzing {pair}: {e}")
+                    continue
         
         return signals
 
