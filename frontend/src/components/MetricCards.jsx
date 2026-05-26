@@ -43,11 +43,11 @@ const MetricCards = ({ balance, performance, pnlMode, setPnlMode }) => {
   const pnlSubtitle = pnlMode === 'daily' ? 'Incl. Unrealized' : 'Closed Trades'
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
       <MetricCard
         title="Balance"
         value={`$${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-        subtitle={`Equity: $${equity.toFixed(2)}`}
+        subtitle={`Eq: $${equity.toFixed(2)}`}
         icon={DollarSign}
       />
       <div className="relative group">
@@ -60,10 +60,10 @@ const MetricCards = ({ balance, performance, pnlMode, setPnlMode }) => {
         />
         <button 
           onClick={() => setPnlMode(pnlMode === 'daily' ? 'monthly' : 'daily')}
-          className="absolute -top-1 -right-1 z-10 p-1.5 rounded-full bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 transition-all shadow-lg active:scale-95"
+          className="absolute -top-1 -right-1 z-10 p-1 md:p-1.5 rounded-full bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 transition-all shadow-lg active:scale-95"
           title="Toggle Daily/Monthly"
         >
-          <Zap size={10} fill="currentColor" />
+          <Zap size={8} className="md:w-[10px] md:h-[10px]" fill="currentColor" />
         </button>
       </div>
       <MetricCard
@@ -75,7 +75,7 @@ const MetricCards = ({ balance, performance, pnlMode, setPnlMode }) => {
       <MetricCard
         title="Open"
         value={performance?.open_positions || 0}
-        subtitle={`Total Trades: ${performance?.total_trades || 0}`}
+        subtitle={`Total: ${performance?.total_trades || 0}`}
         icon={Zap}
       />
     </div>

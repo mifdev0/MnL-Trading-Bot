@@ -77,36 +77,36 @@ function App() {
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-surface-container-lowest/80 backdrop-blur-md border-b border-border-glass">
-        <div className="max-w-7xl mx-auto px-6 py-3">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary/20 p-1.5 rounded-lg border border-primary/30">
-                <Layers size={18} className="text-primary" />
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="bg-primary/20 p-1 md:p-1.5 rounded-lg border border-primary/30">
+                <Layers size={16} className="text-primary md:w-[18px] md:h-[18px]" />
               </div>
               <div>
-                <div className="text-lg font-bold tracking-tighter text-on-surface leading-none">
+                <div className="text-base md:text-lg font-bold tracking-tighter text-on-surface leading-none">
                   MnL<span className="text-primary">OS</span>
                 </div>
-                <div className="text-[9px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mt-0.5">
+                <div className="text-[8px] md:text-[9px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mt-0.5">
                   Aetheric Intelligence
                 </div>
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
-              <div className="hidden md:flex flex-col items-end">
-                <div className="text-[10px] font-mono text-on-surface-variant leading-none">
+            <div className="flex items-center gap-3 md:gap-6">
+              <div className="flex flex-col items-end">
+                <div className="text-[9px] md:text-[10px] font-mono text-on-surface-variant leading-none">
                   {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </div>
-                <div className="text-[8px] font-bold text-secondary uppercase tracking-widest mt-1">
+                <div className="text-[7px] md:text-[8px] font-bold text-secondary uppercase tracking-widest mt-1">
                   Live Node: 0.04ms
                 </div>
               </div>
               <button 
                 onClick={() => fetchAll()}
-                className="p-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-border-glass text-on-surface-variant transition-colors group"
+                className="p-1.5 md:p-2 rounded-lg bg-surface-container hover:bg-surface-container-high border border-border-glass text-on-surface-variant transition-colors group"
               >
-                <RefreshCw size={14} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
+                <RefreshCw size={12} className={loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500 md:w-[14px] md:h-[14px]'} />
               </button>
             </div>
           </div>
@@ -114,10 +114,10 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
           {/* Main Viewport */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-4 md:space-y-6">
             <BotStatus
               botStatus={botStatus}
               onPause={pauseBot}
