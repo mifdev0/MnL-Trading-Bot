@@ -391,8 +391,8 @@ Leverage: {settings.LEVERAGE}x
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
     
-    def run(self):
-        """Run the bot"""
+    async def run_async(self):
+        """Run the bot asynchronously"""
         try:
             # Create application
             self.app = Application.builder().token(self.token).build()
@@ -413,11 +413,27 @@ Leverage: {settings.LEVERAGE}x
             self.app.add_handler(CommandHandler("closeall", self.closeall_command))
             self.app.add_handler(CommandHandler("help", self.help_command))
             
-            logger.info("Telegram bot started")
+            logger.info("Telegram bot initialized (async mode)")
             
-            # Run bot
-            self.app.run_polling()
-            
+            # Start polling
+            async with self.app:
+                await self.app.initialize()
+                await self.app.start()
+                await self.app.updater.start_polling()
+                logger.info("Telegram bot polling started")
+                # Keep running until cancelled
+                while True:
+                    await asyncio.sleep(3600)
+                    
+        except Exception as e:
+            logger.error(f"Error running Telegram bot (async): {e}")
+
+    def run(self):
+        """Run the bot (synchronous wrapper)"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.run_async())
         except Exception as e:
             logger.error(f"Error running Telegram bot: {e}")
 
