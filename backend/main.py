@@ -160,11 +160,15 @@ async def broadcast_update(data: dict):
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Railway provides the port via the PORT environment variable
+    port = int(os.environ.get("PORT", settings.API_PORT))
     
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=settings.API_PORT,
+        port=port,
         reload=False,
         log_level="info"
     )
