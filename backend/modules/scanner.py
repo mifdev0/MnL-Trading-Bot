@@ -117,7 +117,7 @@ class MarketScanner:
             logger.info(f"Found {len(candidates)} candidate pairs")
             
             # Return only symbols
-            return [c['symbol'] for c in candidates[:20]]  # Top 20 by volume
+            return [c['symbol'] for c in candidates[:10]]  # Top 10 by volume
             
         except Exception as e:
             logger.error(f"Error scanning market: {e}")

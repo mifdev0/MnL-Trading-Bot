@@ -226,40 +226,40 @@ class AISignalEngine:
     def _is_market_interesting(self, indicators: Dict) -> tuple[bool, str, str]:
         """
         Pre-filter to check if market momentum is interesting enough for AI analysis.
-        Returns (is_interesting, reason, potential_direction)
+        Requires confluence (multiple indicators) to reduce API calls.
         """
-        # 1. RSI Extreme (Tightened threshold: <=35 or >=65)
-        if indicators['rsi'] <= 35:
-            return True, f"RSI is low ({indicators['rsi']})", "LONG"
-        if indicators['rsi'] >= 65:
-            return True, f"RSI is high ({indicators['rsi']})", "SHORT"
+        rsi = indicators['rsi']
+        macd_cross = indicators['macd_cross']
+        bb_pos = indicators['bb_position']
+        ema_trend = indicators['ema_trend']
+        vol_spike = indicators['volume'] > indicators['volume_avg'] * 1.5
+        
+        # 1. Trend Following Confluence (Trend + BB/Volume Pullback)
+        if ema_trend == 'bullish':
+            if bb_pos == 'lower' or vol_spike:
+                return True, f"Bullish Trend + {'BB Pullback' if bb_pos == 'lower' else 'Vol Spike'}", "LONG"
+        if ema_trend == 'bearish':
+            if bb_pos == 'upper' or vol_spike:
+                return True, f"Bearish Trend + {'BB Pullback' if bb_pos == 'upper' else 'Vol Spike'}", "SHORT"
+                
+        # 2. Reversal Confluence (RSI Extreme + MACD Cross)
+        if rsi <= 35 and macd_cross == 'bullish':
+            return True, "Oversold RSI + MACD Bullish Cross", "LONG"
+        if rsi >= 65 and macd_cross == 'bearish':
+            return True, "Overbought RSI + MACD Bearish Cross", "SHORT"
             
-        # 2. MACD Crossover
-        if indicators['macd_cross'] == 'bullish':
-            return True, "MACD bullish cross", "LONG"
-        if indicators['macd_cross'] == 'bearish':
-            return True, "MACD bearish cross", "SHORT"
+        # 3. BB Extreme + MACD Cross
+        if bb_pos == 'lower' and macd_cross == 'bullish':
+            return True, "BB Lower + MACD Bullish Cross", "LONG"
+        if bb_pos == 'upper' and macd_cross == 'bearish':
+            return True, "BB Upper + MACD Bearish Cross", "SHORT"
             
-        # 3. Bollinger Band Pressure
-        if indicators['bb_position'] == 'lower':
-            return True, "Price at lower Bollinger Band", "LONG"
-        if indicators['bb_position'] == 'upper':
-            return True, "Price at upper Bollinger Band", "SHORT"
-            
-        # 4. Strong EMA Trend
-        if indicators['ema_trend'] == 'bullish':
-            return True, "Strong bullish EMA trend", "LONG"
-        if indicators['ema_trend'] == 'bearish':
-            return True, "Strong bearish EMA trend", "SHORT"
-            
-        # 5. Volume Direction Filter (Green for LONG, Red for SHORT)
-        if indicators['volume'] > indicators['volume_avg'] * 1.5:
-            if indicators['price'] > indicators['open']:
-                return True, "Volume spike (Green candle)", "LONG"
-            elif indicators['price'] < indicators['open']:
-                return True, "Volume spike (Red candle)", "SHORT"
-            
-        return False, "Market is sideways/neutral (Boring)", "NONE"
+        # 4. Vol Spike + MACD Cross
+        if vol_spike and macd_cross != 'none':
+            direction = "LONG" if macd_cross == 'bullish' else "SHORT"
+            return True, f"Volume Spike + MACD {direction} Cross", direction
+
+        return False, "No technical confluence found (Boring)", "NONE"
 
     def generate_signal(self, symbol: str) -> Optional[Dict]:
         """
@@ -358,6 +358,14 @@ class AISignalEngine:
             return signal_data
             
         except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "rate_limit" in error_msg.lower():
+                logger.warning(f"Rate limit hit for {symbol}: {error_msg}. Skipping AI analysis.")
+                return {
+                    'pair': symbol, 'signal': 'SKIP', 'confidence': 0, 
+                    'reason': 'API Rate Limit Reached', 'skip_reason': 'Rate limit (429)',
+                    'entry_price': float(indicators['price']), 'sl_price': 0, 'tp_price': 0
+                }
             logger.error(f"Error generating signal for {symbol}: {e}")
             return None
     
@@ -515,7 +523,7 @@ Rule: Signal LONG/SHORT only if confidence >= 70.
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
         signals = []
-        max_workers = min(len(pairs), 10) # Limit concurrent calls to 10
+        max_workers = min(len(pairs), 5) # Limit concurrent calls to 5
         
         logger.info(f"Analyzing {len(pairs)} pairs in parallel (max_workers={max_workers})...")
         
