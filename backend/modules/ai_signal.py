@@ -70,21 +70,31 @@ class AISignalEngine:
         elif self.provider == "gemini":
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            # Use gemini-flash-latest confirmed available in list_models
+            # Use gemini-flash-latest confirmed available
             self.model_name = 'gemini-flash-latest'
             self.client = genai.GenerativeModel(self.model_name)
             self.model = self.model_name
+        elif self.provider == "groq":
+            from groq import Groq
+            self.client = Groq(api_key=settings.GROQ_API_KEY)
+            # Use Llama 4 Scout for top-tier analysis
+            self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
         else:
-            raise ValueError("No valid AI API key found. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or GEMINI_API_KEY")
+            raise ValueError("No valid AI API key found. Set ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY or GROQ_API_KEY")
     
     def _detect_provider(self) -> str:
         """Detect which AI provider to use based on available API keys"""
+        groq_key = getattr(settings, 'GROQ_API_KEY', None)
         gemini_key = getattr(settings, 'GEMINI_API_KEY', None)
         deepseek_key = getattr(settings, 'DEEPSEEK_API_KEY', None)
         anthropic_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
         
+        # Prioritize Groq (Super fast and reliable)
+        if groq_key and groq_key != "dummy_key" and groq_key.strip():
+            logger.info("Using Groq AI (Llama 3.1)")
+            return "groq"
         # Prioritize Gemini if available (fast & reliable)
-        if gemini_key and gemini_key != "dummy_key" and gemini_key.strip():
+        elif gemini_key and gemini_key != "dummy_key" and gemini_key.strip():
             logger.info("Using Gemini AI")
             return "gemini"
         # Prioritize DeepSeek if available (cheaper)
@@ -124,6 +134,8 @@ class AISignalEngine:
             
             # Bollinger Bands
             df['bb_upper'], df['bb_middle'], df['bb_lower'] = calculate_bollinger_bands(df['close'], period=20)
+            df['bb_width'] = df['bb_upper'] - df['bb_lower']
+            df['bb_width_avg'] = df['bb_width'].rolling(window=20).mean()
             
             # Get latest values
             latest = df.iloc[-1]
@@ -135,6 +147,7 @@ class AISignalEngine:
             # Technical analysis summary
             indicators = {
                 'price': current_price,
+                'open': float(latest['open']),
                 'rsi': round(float(latest['rsi']), 2),
                 'ema_20': round(float(latest['ema_20']), 2),
                 'ema_50': round(float(latest['ema_50']), 2),
@@ -145,6 +158,8 @@ class AISignalEngine:
                 'bb_upper': round(float(latest['bb_upper']), 2),
                 'bb_middle': round(float(latest['bb_middle']), 2),
                 'bb_lower': round(float(latest['bb_lower']), 2),
+                'bb_width': round(float(latest['bb_width']), 4),
+                'bb_width_avg': round(float(latest['bb_width_avg']), 4),
                 'volume': float(latest['volume']),
                 'volume_avg': float(df['volume'].tail(20).mean()),
                 
@@ -164,38 +179,91 @@ class AISignalEngine:
             logger.error(f"Error calculating indicators for {symbol}: {e}")
             return None
     
-    def _is_market_interesting(self, indicators: Dict) -> tuple[bool, str]:
+    def get_htf_trend(self, symbol: str) -> str:
+        """Fetch 1H data and return EMA trend (bullish/bearish/neutral)"""
+        try:
+            ohlcv = self.scanner.get_ohlcv(symbol, timeframe='1h', limit=100)
+            if not ohlcv or len(ohlcv) < 50:
+                return "neutral"
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            ema_20 = calculate_ema(df['close'], 20).iloc[-1]
+            ema_50 = calculate_ema(df['close'], 50).iloc[-1]
+            if ema_20 > ema_50: return "bullish"
+            if ema_20 < ema_50: return "bearish"
+            return "neutral"
+        except Exception as e:
+            logger.error(f"Error getting HTF trend for {symbol}: {e}")
+            return "neutral"
+
+    def get_combined_sentiment(self, symbol: str) -> str:
+        """Combine 4h and 24h sentiment with 70/30 weight"""
+        try:
+            news_4h = self.news_engine.get_news_for_pair(symbol, hours=4)
+            news_24h = self.news_engine.get_news_for_pair(symbol, hours=24)
+            
+            def get_score(news_list):
+                if not news_list: return 0
+                scores = []
+                for n in news_list:
+                    s = n.get('sentiment', 'neutral').lower()
+                    if s == 'bullish': scores.append(1)
+                    elif s == 'bearish': scores.append(-1)
+                    else: scores.append(0)
+                return sum(scores) / len(scores)
+            
+            score_4h = get_score(news_4h)
+            score_24h = get_score(news_24h)
+            
+            combined_score = (score_4h * 0.7) + (score_24h * 0.3)
+            
+            if combined_score > 0.1: return "bullish"
+            if combined_score < -0.1: return "bearish"
+            return "neutral"
+        except Exception as e:
+            logger.error(f"Error getting combined sentiment for {symbol}: {e}")
+            return "neutral"
+
+    def _is_market_interesting(self, indicators: Dict) -> tuple[bool, str, str]:
         """
         Pre-filter to check if market momentum is interesting enough for AI analysis.
-        Returns (is_interesting, reason)
+        Returns (is_interesting, reason, potential_direction)
         """
-        # 1. RSI Extreme (Overbought/Oversold or approaching)
-        if indicators['rsi'] <= 40:
-            return True, f"RSI is low ({indicators['rsi']})"
-        if indicators['rsi'] >= 60:
-            return True, f"RSI is high ({indicators['rsi']})"
+        # 1. RSI Extreme (Tightened threshold: <=35 or >=65)
+        if indicators['rsi'] <= 35:
+            return True, f"RSI is low ({indicators['rsi']})", "LONG"
+        if indicators['rsi'] >= 65:
+            return True, f"RSI is high ({indicators['rsi']})", "SHORT"
             
         # 2. MACD Crossover
-        if indicators['macd_cross'] != 'none':
-            return True, f"MACD {indicators['macd_cross']} cross"
+        if indicators['macd_cross'] == 'bullish':
+            return True, "MACD bullish cross", "LONG"
+        if indicators['macd_cross'] == 'bearish':
+            return True, "MACD bearish cross", "SHORT"
             
         # 3. Bollinger Band Pressure
-        if indicators['bb_position'] != 'middle':
-            return True, f"Price at {indicators['bb_position']} Bollinger Band"
+        if indicators['bb_position'] == 'lower':
+            return True, "Price at lower Bollinger Band", "LONG"
+        if indicators['bb_position'] == 'upper':
+            return True, "Price at upper Bollinger Band", "SHORT"
             
         # 4. Strong EMA Trend
-        if indicators['ema_trend'] != 'neutral':
-            return True, f"Strong {indicators['ema_trend']} EMA trend"
+        if indicators['ema_trend'] == 'bullish':
+            return True, "Strong bullish EMA trend", "LONG"
+        if indicators['ema_trend'] == 'bearish':
+            return True, "Strong bearish EMA trend", "SHORT"
             
-        # 5. Volume Spike
+        # 5. Volume Direction Filter (Green for LONG, Red for SHORT)
         if indicators['volume'] > indicators['volume_avg'] * 1.5:
-            return True, "Volume spike detected"
+            if indicators['price'] > indicators['open']:
+                return True, "Volume spike (Green candle)", "LONG"
+            elif indicators['price'] < indicators['open']:
+                return True, "Volume spike (Red candle)", "SHORT"
             
-        return False, "Market is sideways/neutral (Boring)"
+        return False, "Market is sideways/neutral (Boring)", "NONE"
 
     def generate_signal(self, symbol: str) -> Optional[Dict]:
         """
-        Generate trading signal using AI analysis
+        Generate trading signal using AI analysis with HTF filter and dynamic sentiment
         """
         try:
             logger.info(f"Generating signal for {symbol}")
@@ -206,27 +274,32 @@ class AISignalEngine:
                 return None
             
             # PRE-FILTER: Only call AI if market is interesting
-            interesting, reason = self._is_market_interesting(indicators)
+            interesting, reason, potential_dir = self._is_market_interesting(indicators)
             if not interesting:
                 logger.info(f"Skipping AI for {symbol}: {reason}")
                 return {
-                    'pair': symbol,
-                    'signal': 'SKIP',
-                    'confidence': 0,
-                    'reason': reason,
-                    'skip_reason': reason,
-                    'entry_price': float(indicators['price']),
-                    'sl_price': 0,
-                    'tp_price': 0
+                    'pair': symbol, 'signal': 'SKIP', 'confidence': 0, 'reason': reason,
+                    'skip_reason': reason, 'entry_price': float(indicators['price']), 'sl_price': 0, 'tp_price': 0
                 }
 
-            logger.info(f"Market interesting for {symbol}: {reason}. Calling AI...")
+            # HTF Filter: Check 1H trend before calling AI
+            htf_trend = self.get_htf_trend(symbol)
+            if (potential_dir == "LONG" and htf_trend == "bearish") or \
+               (potential_dir == "SHORT" and htf_trend == "bullish"):
+                skip_msg = f"HTF Trend Filter: Candidate {potential_dir} blocked by 1H {htf_trend} trend"
+                logger.info(f"Skipping AI for {symbol}: {skip_msg}")
+                return {
+                    'pair': symbol, 'signal': 'SKIP', 'confidence': 0, 'reason': skip_msg,
+                    'skip_reason': skip_msg, 'entry_price': float(indicators['price']), 'sl_price': 0, 'tp_price': 0
+                }
+
+            logger.info(f"Market interesting for {symbol} ({potential_dir}). HTF: {htf_trend}. Calling AI...")
             
-            # Get relevant news
-            news = self.news_engine.get_news_for_pair(symbol, hours=24)
+            # Get combined news sentiment (4h weight 70%, 24h weight 30%)
+            combined_sentiment = self.get_combined_sentiment(symbol)
             
-            # Prepare prompt
-            prompt = self._build_analysis_prompt(symbol, indicators, news)
+            # Prepare prompt with HTF and Combined Sentiment context
+            prompt = self._build_analysis_prompt(symbol, indicators, combined_sentiment, htf_trend)
             
             # Call AI API based on provider
             if self.provider == "claude":
@@ -264,6 +337,20 @@ class AISignalEngine:
                     }
                 )
                 content = response.text
+            elif self.provider == "groq":
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=2048,
+                    response_format={"type": "json_object"}
+                )
+                content = response.choices[0].message.content
             
             # Parse response
             signal_data = self._parse_ai_response(content, symbol, indicators)
@@ -274,29 +361,24 @@ class AISignalEngine:
             logger.error(f"Error generating signal for {symbol}: {e}")
             return None
     
-    def _build_analysis_prompt(self, symbol: str, indicators: Dict, news: List[Dict]) -> str:
+    def _build_analysis_prompt(self, symbol: str, indicators: Dict, sentiment: str, htf_trend: str) -> str:
         """
-        Build analysis prompt for AI
+        Build analysis prompt for AI including HTF and Combined Sentiment
         """
-        # Format news
-        news_text = "\n".join([
-            f"- [{n['sentiment'].upper()}] {n['title']}"
-            for n in news[:5]
-        ]) if news else "None"
-        
         prompt = f"""Trading analysis for {symbol}:
 PRICE: ${indicators['price']}
 RSI: {indicators['rsi']} ({indicators['rsi_zone']})
-TREND: {indicators['ema_trend']}
+TREND (15m): {indicators['ema_trend']}
+TREND (1H HTF): {htf_trend}
 MACD: {indicators['macd']} (Hist: {indicators['macd_hist']})
-BB: {indicators['bb_position']}
-NEWS: {news_text}
+BB: {indicators['bb_position']} (Width: {indicators['bb_width']})
+NEWS SENTIMENT (Weighted): {sentiment}
 
 Respond ONLY with this JSON:
 {{
   "signal": "LONG", "SHORT", or "SKIP",
   "confidence": 0-100,
-  "news_sentiment": "bullish", "bearish", or "neutral",
+  "news_sentiment": "{sentiment}",
   "technical_score": 0-100,
   "reason": "short explanation",
   "entry_price": {indicators['price']},
@@ -304,13 +386,13 @@ Respond ONLY with this JSON:
   "tp_price": TP price,
   "skip_reason": "if SKIP"
 }}
-Rule: Signal LONG/SHORT only if confidence >= 65.
+Rule: Signal LONG/SHORT only if confidence >= 70.
 """
         return prompt
     
     def _parse_ai_response(self, response: str, symbol: str, indicators: Dict) -> Dict:
         """
-        Parse AI response into structured signal data
+        Parse AI response into structured signal data with DYNAMIC CONFIDENCE THRESHOLD
         """
         try:
             # Deeply clean and extract JSON
@@ -391,11 +473,25 @@ Rule: Signal LONG/SHORT only if confidence >= 65.
                 'current_price': price
             }
             
+            # DYNAMIC CONFIDENCE THRESHOLD
+            threshold = 70
+            
+            # 1. BB Width Spike (Volatility check)
+            if indicators.get('bb_width', 0) > 2 * indicators.get('bb_width_avg', 0):
+                threshold = 75
+                
+            # 2. Opposite News Sentiment check
+            news_sent = str(signal['news_sentiment']).lower()
+            if (signal['signal'] == 'LONG' and news_sent == 'bearish') or \
+               (signal['signal'] == 'SHORT' and news_sent == 'bullish'):
+                threshold = 80
+                
             # Validate confidence threshold
-            if signal['confidence'] < 65:
+            if signal['confidence'] < threshold:
+                orig_signal = signal['signal']
                 signal['signal'] = 'SKIP'
-                if not signal['skip_reason']:
-                    signal['skip_reason'] = f"Confidence too low ({signal['confidence']}%)"
+                if not signal['skip_reason'] or signal['skip_reason'] == "if SKIP":
+                    signal['skip_reason'] = f"Confidence {signal['confidence']}% below dynamic threshold {threshold}% (Signal was {orig_signal})"
             
             return signal
             

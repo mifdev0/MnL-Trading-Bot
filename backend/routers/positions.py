@@ -7,6 +7,7 @@ from database import get_db
 from models.position import Position
 from modules.position_manager import PositionManager
 from typing import List
+from decimal import Decimal
 
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 position_manager = PositionManager()
@@ -76,5 +77,42 @@ async def get_all_positions(db: Session = Depends(get_db)):
                 for p in positions
             ]
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/close/{position_id}")
+async def close_position(position_id: int, db: Session = Depends(get_db)):
+    """Close a specific position manually"""
+    try:
+        position = db.get(Position, position_id)
+        if not position:
+            raise HTTPException(status_code=404, detail="Position not found")
+        
+        if position.status == 'CLOSED':
+            raise HTTPException(status_code=400, detail="Position already closed")
+            
+        from modules.order_executor import OrderExecutor
+        executor = OrderExecutor()
+        success = executor.close_position(position, reason="Manual close via Dashboard")
+        
+        if success:
+            return {"success": True, "message": f"Position {position.pair} closed"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to close position")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/close-all")
+async def close_all_positions():
+    """Close all open positions manually"""
+    try:
+        from modules.order_executor import OrderExecutor
+        executor = OrderExecutor()
+        closed_count = executor.close_all_positions()
+        
+        return {"success": True, "message": f"Closed {closed_count} positions"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

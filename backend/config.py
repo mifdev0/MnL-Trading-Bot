@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = "dummy_key"
     DEEPSEEK_API_KEY: Optional[str] = "dummy_key"
     GEMINI_API_KEY: Optional[str] = "dummy_key"
+    GROQ_API_KEY: Optional[str] = "dummy_key"
     
     # News APIs
     CRYPTOPANIC_API_KEY: str

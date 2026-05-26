@@ -83,6 +83,103 @@ async def get_performance(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/history")
+async def get_performance_history(db: Session = Depends(get_db)):
+    """Get aggregated performance history (daily and monthly)"""
+    try:
+        # Unrealized PnL from open positions to add to today's bar
+        unrealized_pnl = db.query(func.sum(Position.pnl)).filter(
+            Position.status.in_(['OPEN', 'BE', 'TRAILING'])
+        ).scalar() or 0
+
+        # 1. Daily History (Last 30 days)
+        daily_cutoff = datetime.now() - timedelta(days=30)
+        daily_trades = db.query(
+            func.date(Position.closed_at).label('date'),
+            func.sum(Position.pnl).label('pnl'),
+            func.count(Position.id).label('trades')
+        ).filter(
+            Position.status == 'CLOSED',
+            Position.closed_at >= daily_cutoff
+        ).group_by(func.date(Position.closed_at)).order_by(func.date(Position.closed_at)).all()
+
+        daily_history = [
+            {
+                "date": str(d.date),
+                "pnl": float(d.pnl),
+                "trades": d.trades
+            }
+            for d in daily_trades
+        ]
+
+        # Add current day if not present or update it with unrealized
+        today_str = str(datetime.now().date())
+        today_item = next((item for item in daily_history if item["date"] == today_str), None)
+        
+        if today_item:
+            today_item["pnl"] += float(unrealized_pnl)
+        else:
+            daily_history.append({
+                "date": today_str,
+                "pnl": float(unrealized_pnl),
+                "trades": 0
+            })
+        
+        # Sort again just in case
+        daily_history.sort(key=lambda x: x["date"])
+
+        # 2. Monthly History (Last 12 months)
+        monthly_cutoff = datetime.now() - timedelta(days=365)
+        
+        # Determine DB type for grouping
+        is_sqlite = db.bind.dialect.name == 'sqlite'
+        
+        if is_sqlite:
+            month_label = func.strftime('%Y-%m', Position.closed_at)
+        else:
+            month_label = func.to_char(Position.closed_at, 'YYYY-MM')
+
+        monthly_trades = db.query(
+            month_label.label('month'),
+            func.sum(Position.pnl).label('pnl'),
+            func.count(Position.id).label('trades')
+        ).filter(
+            Position.status == 'CLOSED',
+            Position.closed_at >= monthly_cutoff
+        ).group_by('month').order_by('month').all()
+
+        monthly_history = [
+            {
+                "month": m.month,
+                "pnl": float(m.pnl),
+                "trades": m.trades
+            }
+            for m in monthly_trades
+        ]
+
+        # Add unrealized to current month
+        current_month = datetime.now().strftime('%Y-%m')
+        month_item = next((item for item in monthly_history if item["month"] == current_month), None)
+        if month_item:
+            month_item["pnl"] += float(unrealized_pnl)
+        elif unrealized_pnl != 0:
+            monthly_history.append({
+                "month": current_month,
+                "pnl": float(unrealized_pnl),
+                "trades": 0
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "daily": daily_history,
+                "monthly": monthly_history
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/equity")
 async def get_equity_curve(days: int = 30, db: Session = Depends(get_db)):
     """Get equity curve data"""

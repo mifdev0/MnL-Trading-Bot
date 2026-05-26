@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import useStore from './store/useStore'
 import MetricCards from './components/MetricCards'
 import PositionsTable from './components/PositionsTable'
 import NewsFeed from './components/NewsFeed'
 import TradeHistory from './components/TradeHistory'
 import BotStatus from './components/BotStatus'
+import PnLChart from './components/PnLChart'
 import { AlertCircle, RefreshCw, Cpu, Layers } from 'lucide-react'
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
     positions,
     trades,
     performance,
+    performanceHistory,
     news,
     botStatus,
     loading,
@@ -21,6 +23,8 @@ function App() {
     pauseBot,
     resumeBot
   } = useStore()
+
+  const [pnlMode, setPnlMode] = useState('daily')
 
   useEffect(() => {
     // Initial fetch
@@ -120,8 +124,15 @@ function App() {
               onResume={resumeBot}
             />
             
-            <MetricCards balance={balance} performance={performance} />
+            <MetricCards 
+              balance={balance} 
+              performance={performance} 
+              pnlMode={pnlMode}
+              setPnlMode={setPnlMode}
+            />
             
+            <PnLChart history={performanceHistory} mode={pnlMode} />
+
             <PositionsTable positions={positions} />
             
             <TradeHistory trades={trades} />

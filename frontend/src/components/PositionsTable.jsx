@@ -1,7 +1,9 @@
 import React from 'react'
-import { Briefcase, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react'
+import { Briefcase, ArrowUpRight, ArrowDownRight, Info, XCircle } from 'lucide-react'
+import useStore from '../store/useStore'
 
 const PositionsTable = ({ positions }) => {
+  const { closePosition } = useStore()
   const getStatusStyle = (status) => {
     switch(status) {
       case 'BE':
@@ -80,11 +82,24 @@ const PositionsTable = ({ positions }) => {
                     </span>
                   </td>
                   <td className="py-2.5 text-right">
-                    <div className="group/info relative inline-block">
-                      <Info size={14} className="text-on-surface-variant cursor-help opacity-40 hover:opacity-100 transition-opacity" />
-                      <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-surface-container border border-border-glass rounded text-[10px] text-on-surface-variant opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all z-50 shadow-xl backdrop-blur-md">
-                        {position?.ai_reason}
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="group/info relative inline-block">
+                        <Info size={14} className="text-on-surface-variant cursor-help opacity-40 hover:opacity-100 transition-opacity" />
+                        <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-surface-container border border-border-glass rounded text-[10px] text-on-surface-variant opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all z-50 shadow-xl backdrop-blur-md text-left">
+                          {position?.ai_reason}
+                        </div>
                       </div>
+                      <button 
+                        onClick={() => {
+                          if (window.confirm(`Close ${position.pair} manually?`)) {
+                            closePosition(position.id)
+                          }
+                        }}
+                        className="text-tertiary opacity-40 hover:opacity-100 transition-opacity"
+                        title="Close Position"
+                      >
+                        <XCircle size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>

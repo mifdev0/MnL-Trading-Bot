@@ -1,7 +1,9 @@
 import React from 'react'
-import { Activity, Power, CircleDot } from 'lucide-react'
+import { Activity, Power, CircleDot, XOctagon } from 'lucide-react'
+import useStore from '../store/useStore'
 
 const BotStatus = ({ botStatus, onPause, onResume }) => {
+  const { closeAllPositions } = useStore()
   const isActive = !botStatus?.paused
 
   return (
@@ -28,22 +30,34 @@ const BotStatus = ({ botStatus, onPause, onResume }) => {
           </div>
         </div>
         
-        <div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              if (window.confirm('WARNING: Close all active positions immediately?')) {
+                closeAllPositions()
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-tertiary/10 text-tertiary border border-tertiary/20 hover:bg-tertiary hover:text-on-tertiary transition-all duration-300 text-[10px] font-bold"
+          >
+            <XOctagon size={14} />
+            CLOSE ALL
+          </button>
+          
           {isActive ? (
             <button
               onClick={onPause}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-tertiary/10 text-tertiary border border-tertiary/20 hover:bg-tertiary hover:text-on-tertiary transition-all duration-300 text-xs font-bold"
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-surface-container-high text-on-surface-variant border border-border-glass hover:bg-tertiary/10 hover:text-tertiary transition-all duration-300 text-[10px] font-bold"
             >
               <Power size={14} />
-              PAUSE SYSTEM
+              PAUSE
             </button>
           ) : (
             <button
               onClick={onResume}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary hover:text-on-secondary transition-all duration-300 text-xs font-bold"
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary hover:text-on-secondary transition-all duration-300 text-[10px] font-bold"
             >
               <Power size={14} />
-              RESUME SYSTEM
+              RESUME
             </button>
           )}
         </div>

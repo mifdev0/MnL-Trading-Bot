@@ -1,7 +1,27 @@
-import React from 'react'
-import { Newspaper, BarChart2, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Newspaper, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 
 const NewsFeed = ({ news }) => {
+  // Force re-render every minute to update relative time
+  const [now, setNow] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const formatTime = (isoString) => {
+    if (!isoString) return ''
+    try {
+      const date = new Date(isoString)
+      // Use date-fns for accurate relative time
+      return formatDistanceToNow(date, { addSuffix: true })
+    } catch (e) {
+      return ''
+    }
+  }
+
   const getSentimentIcon = (sentiment) => {
     switch (sentiment) {
       case 'bullish':
@@ -16,7 +36,7 @@ const NewsFeed = ({ news }) => {
   return (
     <div className="glass-container p-4">
       <div className="flex items-center gap-2 mb-4 border-b border-border-glass pb-3">
-        <Newspaper size={16} className="text-primary" />
+        < Newspaper size={16} className="text-primary" />
         <h2 className="text-xs font-bold uppercase tracking-widest text-on-surface">Intelligence Feed</h2>
       </div>
       <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
@@ -38,9 +58,14 @@ const NewsFeed = ({ news }) => {
                     {item.sentiment}
                   </span>
                 </div>
-                <span className="text-[9px] font-mono text-on-surface-variant opacity-50">
-                  {item.source}
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className="text-[8px] font-mono text-primary font-bold">
+                    {formatTime(item.published_at)}
+                  </span>
+                  <span className="text-[7px] font-mono text-on-surface-variant opacity-40">
+                    {item.source}
+                  </span>
+                </div>
               </div>
               
               <h3 className="text-[11px] leading-relaxed font-medium text-on-surface line-clamp-2 group-hover:text-primary transition-colors">

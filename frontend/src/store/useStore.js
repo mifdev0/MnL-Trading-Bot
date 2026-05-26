@@ -7,6 +7,7 @@ const useStore = create((set, get) => ({
   positions: [],
   trades: [],
   performance: {},
+  performanceHistory: { daily: [], monthly: [] },
   news: [],
   signals: [],
   botStatus: { paused: false, status: 'active', open_positions: 0 },
@@ -58,6 +59,18 @@ const useStore = create((set, get) => ({
       }
     } catch (error) {
       console.error('Error fetching performance:', error)
+      set({ error: error.message })
+    }
+  },
+
+  fetchPerformanceHistory: async () => {
+    try {
+      const response = await axios.get('/api/performance/history')
+      if (response.data && response.data.data) {
+        set({ performanceHistory: response.data.data })
+      }
+    } catch (error) {
+      console.error('Error fetching performance history:', error)
       set({ error: error.message })
     }
   },
@@ -116,6 +129,32 @@ const useStore = create((set, get) => ({
     }
   },
 
+  closePosition: async (positionId) => {
+    try {
+      await axios.post(`/api/positions/close/${positionId}`)
+      await Promise.all([
+        get().fetchPositions(),
+        get().fetchBalance(),
+        get().fetchPerformance()
+      ])
+    } catch (error) {
+      set({ error: error.message })
+    }
+  },
+
+  closeAllPositions: async () => {
+    try {
+      await axios.post('/api/positions/close-all')
+      await Promise.all([
+        get().fetchPositions(),
+        get().fetchBalance(),
+        get().fetchPerformance()
+      ])
+    } catch (error) {
+      set({ error: error.message })
+    }
+  },
+
   fetchAll: async () => {
     set({ loading: true })
     await Promise.all([
@@ -123,6 +162,7 @@ const useStore = create((set, get) => ({
       get().fetchPositions(),
       get().fetchTrades(),
       get().fetchPerformance(),
+      get().fetchPerformanceHistory(),
       get().fetchNews(),
       get().fetchSignals(),
       get().fetchBotStatus()
