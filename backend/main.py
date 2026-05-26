@@ -43,11 +43,22 @@ async def lifespan(app: FastAPI):
     logger.info("Starting scheduler...")
     start_scheduler()
     
-    # Start Telegram bot in a separate thread
+    # Start Telegram bot as an asyncio task
     logger.info("Starting Telegram bot...")
     from modules.telegram_bot import TelegramBot
     bot = TelegramBot()
-    bot_thread = threading.Thread(target=bot.run, daemon=True)
+    # Assuming telegram_bot.py is updated to have an async run() or run_polling() 
+    # For now, if run() is synchronous and blocking, we need to run it in an executor
+    # But since it's a telegram bot, we should run it in a way that doesn't conflict with asyncio.
+    # Python-telegram-bot v20+ is async. We should call its async init/start methods.
+    
+    def run_bot_in_thread():
+        # Create a new event loop for the bot thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        bot.run()
+        
+    bot_thread = threading.Thread(target=run_bot_in_thread, daemon=True)
     bot_thread.start()
     
     logger.info("[OK] System started successfully")
