@@ -3,6 +3,7 @@ News Engine - Fetch and process crypto news from multiple sources
 """
 import requests
 import logging
+import re
 from typing import List, Dict
 from datetime import datetime, timedelta
 from config import settings
@@ -19,9 +20,10 @@ class NewsEngine:
         self.newsapi_key = settings.NEWSAPI_KEY
         self.coingecko_key = settings.COINGECKO_API_KEY
         self.session = requests.Session()
-    
+
     def fetch_cryptopanic_news(self, coins: List[str] = None) -> List[Dict]:
-        """
+        # ... (rest of the method)
+
         Fetch news from CryptoPanic API
         
         Args:
@@ -213,8 +215,15 @@ class NewsEngine:
             'negative', 'decrease', 'loss', 'fear', 'panic'
         ]
         
-        bullish_count = sum(1 for word in bullish_keywords if word in text_lower)
-        bearish_count = sum(1 for word in bearish_keywords if word in text_lower)
+        bullish_count = 0
+        for word in bullish_keywords:
+            if re.search(r'\b' + re.escape(word) + r'\b', text_lower):
+                bullish_count += 1
+                
+        bearish_count = 0
+        for word in bearish_keywords:
+            if re.search(r'\b' + re.escape(word) + r'\b', text_lower):
+                bearish_count += 1
         
         if bullish_count > bearish_count:
             return 'bullish'

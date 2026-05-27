@@ -243,10 +243,10 @@ class AISignalEngine:
                 return True, f"Bearish Trend + {'BB Pullback' if bb_pos == 'upper' else 'Vol Spike'}", "SHORT"
                 
         # 2. Reversal Confluence (RSI Extreme + MACD Cross)
-        if rsi <= 35 and macd_cross == 'bullish':
-            return True, "Oversold RSI + MACD Bullish Cross", "LONG"
-        if rsi >= 65 and macd_cross == 'bearish':
-            return True, "Overbought RSI + MACD Bearish Cross", "SHORT"
+        if rsi <= 30 and macd_cross == 'bullish':
+            return True, "Oversold RSI (<=30) + MACD Bullish Cross", "LONG"
+        if rsi >= 70 and macd_cross == 'bearish':
+            return True, "Overbought RSI (>=70) + MACD Bearish Cross", "SHORT"
             
         # 3. BB Extreme + MACD Cross
         if bb_pos == 'lower' and macd_cross == 'bullish':
@@ -295,11 +295,16 @@ class AISignalEngine:
 
             logger.info(f"Market interesting for {symbol} ({potential_dir}). HTF: {htf_trend}. Calling AI...")
             
+            # Get news for the pair to provide context to AI
+            recent_news = self.news_engine.get_news_for_pair(symbol, hours=24)
+            news_headlines = [f"- {n['title']} ({n['sentiment']})" for n in recent_news[:5]]
+            news_context = "\n".join(news_headlines) if news_headlines else "No recent specific news found."
+            
             # Get combined news sentiment (4h weight 70%, 24h weight 30%)
             combined_sentiment = self.get_combined_sentiment(symbol)
             
-            # Prepare prompt with HTF and Combined Sentiment context
-            prompt = self._build_analysis_prompt(symbol, indicators, combined_sentiment, htf_trend)
+            # Prepare prompt with HTF, Combined Sentiment, and Headlines context
+            prompt = self._build_analysis_prompt(symbol, indicators, combined_sentiment, htf_trend, news_context)
             
             # Call AI API based on provider
             if self.provider == "claude":
@@ -369,9 +374,9 @@ class AISignalEngine:
             logger.error(f"Error generating signal for {symbol}: {e}")
             return None
     
-    def _build_analysis_prompt(self, symbol: str, indicators: Dict, sentiment: str, htf_trend: str) -> str:
+    def _build_analysis_prompt(self, symbol: str, indicators: Dict, sentiment: str, htf_trend: str, news_context: str) -> str:
         """
-        Build analysis prompt for AI including HTF and Combined Sentiment
+        Build analysis prompt for AI including HTF, Combined Sentiment and News Headlines
         """
         prompt = f"""Trading analysis for {symbol}:
 PRICE: ${indicators['price']}
@@ -380,7 +385,10 @@ TREND (15m): {indicators['ema_trend']}
 TREND (1H HTF): {htf_trend}
 MACD: {indicators['macd']} (Hist: {indicators['macd_hist']})
 BB: {indicators['bb_position']} (Width: {indicators['bb_width']})
-NEWS SENTIMENT (Weighted): {sentiment}
+OVERALL SENTIMENT: {sentiment}
+
+RECENT NEWS HEADLINES:
+{news_context}
 
 Respond ONLY with this JSON:
 {{
@@ -388,7 +396,7 @@ Respond ONLY with this JSON:
   "confidence": 0-100,
   "news_sentiment": "{sentiment}",
   "technical_score": 0-100,
-  "reason": "short explanation",
+  "reason": "short explanation based on technicals and news headlines context",
   "entry_price": {indicators['price']},
   "sl_price": SL price,
   "tp_price": TP price,

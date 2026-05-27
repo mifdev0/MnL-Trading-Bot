@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     BE_TRIGGER_R: float = 1.0
     PARTIAL_TP_R: float = 1.5
     TRAILING_ACTIVATION_R: float = 1.0
-    TRAILING_DISTANCE_R: float = 0.5
+    TRAILING_DISTANCE_R: float = 1.0
     BE_BUFFER_PCT: float = 0.1
 
     # Time Exit
