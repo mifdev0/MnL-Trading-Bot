@@ -522,6 +522,28 @@ class PositionManager:
             if r_multiple >= settings.TRAILING_ACTIVATION_R:
                 self.update_trailing_stop(position, current_price)
             
+            # TIME EXIT: Cut posisi yang nyangkut
+            if settings.TIME_EXIT_ENABLED:
+                from datetime import datetime, timezone
+                opened_at = position.opened_at
+                if opened_at:
+                    if opened_at.tzinfo is None:
+                        opened_at = opened_at.replace(tzinfo=timezone.utc)
+                    duration_hours = (datetime.now(timezone.utc) - opened_at).total_seconds() / 3600
+                    current_pnl = (current_price - float(position.entry_price)) * float(position.quantity)
+                    if position.side == 'SHORT':
+                        current_pnl = -current_pnl
+                    
+                    if duration_hours >= settings.TIME_EXIT_HOURS:
+                        if current_pnl < settings.TIME_EXIT_MIN_PNL:
+                            logger.info(f"⏱ Time Exit triggered for {position.pair}: {duration_hours:.1f}h, PnL=${current_pnl:.2f}")
+                            from modules.telegram_bot import notify
+                            notify(f"⏱ *Time Exit*\nPair: `{position.pair}`\nDurasi: {duration_hours:.1f} jam\nPnL: `${current_pnl:.2f}`")
+                            from modules.order_executor import OrderExecutor
+                            executor = OrderExecutor()
+                            executor.close_position(position, "Time Exit")
+                            return
+            
         except Exception as e:
             logger.error(f"Error managing position {position.pair}: {e}")
     

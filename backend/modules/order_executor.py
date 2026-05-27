@@ -101,7 +101,9 @@ class OrderExecutor:
             Position size in base currency
         """
         # Risk amount in USDT
-        risk_amount = balance * (settings.RISK_PER_TRADE / 100)
+        capped_balance = min(balance, settings.MAX_BALANCE_CAP) if settings.MAX_BALANCE_CAP > 0 else balance
+        risk_amount = capped_balance * (settings.RISK_PER_TRADE / 100)
+        logger.info(f"Balance cap applied: ${capped_balance:.2f} (actual: ${balance:.2f}), risk: ${risk_amount:.2f}")
         
         # Risk per unit
         risk_per_unit = abs(entry_price - sl_price)

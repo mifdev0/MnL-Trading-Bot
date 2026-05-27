@@ -144,7 +144,7 @@ class NewsEngine:
                 pub_time = datetime.now() - timedelta(minutes=15)
                 
                 # Determine sentiment based on trending
-                sentiment = 'bullish'  # Trending coins are generally bullish
+                sentiment = 'neutral'  # Trending = popular, bukan berarti harga naik
                 
                 news_items.append({
                     'title': f"{coin_name} ({coin_symbol}) is Trending - Rank #{market_cap_rank}",

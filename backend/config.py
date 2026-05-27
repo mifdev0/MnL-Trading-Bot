@@ -37,19 +37,24 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # Trading Config
-    RISK_PER_TRADE: float = 1.0
+    RISK_PER_TRADE: float = 2.5
     MAX_OPEN_POSITIONS: int = 5
     MIN_VOLUME_24H: float = 50000000
-    MIN_VOLATILITY: float = 2.0
-    LEVERAGE: int = 10
+    MIN_VOLATILITY: float = 3.0
+    LEVERAGE: int = 20
     MAX_BALANCE_CAP: float = 40.0
     
     # Risk Management
     BE_TRIGGER_R: float = 1.0
-    PARTIAL_TP_R: float = 2.0
-    TRAILING_ACTIVATION_R: float = 2.0
-    TRAILING_DISTANCE_R: float = 1.0
+    PARTIAL_TP_R: float = 1.5
+    TRAILING_ACTIVATION_R: float = 1.0
+    TRAILING_DISTANCE_R: float = 0.5
     BE_BUFFER_PCT: float = 0.1
+
+    # Time Exit
+    TIME_EXIT_ENABLED: bool = True
+    TIME_EXIT_HOURS: float = 3.0
+    TIME_EXIT_MIN_PNL: float = -0.10
     
     # Dashboard
     DASHBOARD_PORT: int = 3000
