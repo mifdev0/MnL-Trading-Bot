@@ -152,6 +152,11 @@ def is_bot_paused():
     return bot_paused
 
 
+def heartbeat():
+    """Simple heartbeat log to confirm scheduler is alive"""
+    logger.info("💓 Scheduler heartbeat: Bot is active and monitoring...")
+
+
 # Create scheduler
 scheduler = BackgroundScheduler()
 
@@ -161,6 +166,15 @@ def start_scheduler():
     Start the scheduler with all jobs
     """
     try:
+        # Heartbeat every 1 minute
+        scheduler.add_job(
+            heartbeat,
+            trigger=IntervalTrigger(minutes=1),
+            id='heartbeat',
+            name='Scheduler heartbeat',
+            replace_existing=True
+        )
+
         # Fetch news every 5 minutes
         scheduler.add_job(
             fetch_news,
@@ -191,15 +205,13 @@ def start_scheduler():
         scheduler.start()
         logger.info("✅ Scheduler started")
         
-        # Run initial jobs in background thread to avoid blocking lifespan
+        # Run initial jobs in separate background threads to avoid blocking each other
         import threading
-        def run_initial_jobs():
-            logger.info("Running initial jobs in background...")
-            fetch_news()
-            scan_and_analyze()
-            
-        initial_thread = threading.Thread(target=run_initial_jobs, daemon=True)
-        initial_thread.start()
+        
+        logger.info("Running initial jobs in background...")
+        threading.Thread(target=fetch_news, daemon=True).start()
+        # Delay analysis by 5 seconds to ensure news/db is ready
+        threading.Timer(5.0, scan_and_analyze).start()
         
     except Exception as e:
         logger.error(f"Error starting scheduler: {e}")
