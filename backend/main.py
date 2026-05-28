@@ -38,6 +38,27 @@ async def lifespan(app: FastAPI):
     # Initialize database
     logger.info("Initializing database...")
     init_db()
+
+    # EMERGENCY: Cleanup ghost positions (BCH, XRP) from old testnet
+    try:
+        from database import SessionLocal
+        from models.position import Position
+        from datetime import datetime
+        db = SessionLocal()
+        ghosts = db.query(Position).filter(
+            Position.pair.in_(['BCH/USDT:USDT', 'XRP/USDT:USDT']),
+            Position.status.in_(['OPEN', 'BE', 'TRAILING'])
+        ).all()
+        if ghosts:
+            logger.info(f"🧹 Found {len(ghosts)} ghost positions. Marking as CLOSED...")
+            for g in ghosts:
+                g.status = 'CLOSED'
+                g.closed_at = datetime.now()
+            db.commit()
+            logger.info("✅ Cleanup complete.")
+        db.close()
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
     
     # Start scheduler
     logger.info("Starting scheduler...")
