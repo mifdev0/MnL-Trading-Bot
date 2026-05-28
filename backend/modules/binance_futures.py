@@ -19,18 +19,17 @@ logger = logging.getLogger(__name__)
 class BinanceFuturesClient:
     def __init__(self, demo_mode: bool = True):
         self.demo_mode = demo_mode
-        # Binance has 3 environments now:
+        # Binance has 3 main environments:
         # 1. LIVE: fapi.binance.com
-        # 2. NEW DEMO: demo-api.binance.com (Keys usually start with 'demo_')
-        # 3. OLD TESTNET: testnet.binancefuture.com (Standalone site)
+        # 2. NEW FUTURES DEMO (Mock Trading): demo-fapi.binance.com (User's doc)
+        # 3. OLD STANDALONE TESTNET: testnet.binancefuture.com
         
         if not demo_mode:
             self.base_url = "https://fapi.binance.com"
-        elif settings.BINANCE_API_KEY.startswith("demo_"):
-            self.base_url = "https://demo-api.binance.com"
         else:
-            # Fallback to standalone testnet for legacy keys
-            self.base_url = "https://testnet.binancefuture.com"
+            # According to user's dashboard: Futures Demo API Base Endpoint: https://demo-fapi.binance.com
+            # This is the modern "Mock Trading" environment.
+            self.base_url = "https://demo-fapi.binance.com"
             
         logger.info(f"Binance Futures Client initialized with base URL: {self.base_url}")
         self.verify_ssl = True
