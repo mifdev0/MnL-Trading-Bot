@@ -41,8 +41,14 @@ class PositionManager:
         self.price_error_logged_at = {}
         
         if settings.BINANCE_TESTNET:
-            self.exchange.enable_demo_trading(True)
-            logger.info("Position Manager initialized in DEMO mode")
+            # Robust demo mode detection
+            is_mock_trading = settings.BINANCE_API_KEY.startswith("demo_")
+            if is_mock_trading:
+                self.exchange.enable_demo_trading(True)
+                logger.info("Position Manager initialized in Mock Trading (Production Demo) mode")
+            else:
+                self.exchange.set_sandbox_mode(True)
+                logger.info("Position Manager initialized in Standalone Testnet mode")
         else:
             logger.info("Position Manager initialized in LIVE mode")
 
@@ -527,8 +533,6 @@ class PositionManager:
                                     )
                                 
                                 # Update DB
-                                from database import SessionLocal
-                                from decimal import Decimal
                                 db = SessionLocal()
                                 try:
                                     db_pos = db.query(Position).get(position.id)
