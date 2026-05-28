@@ -32,10 +32,7 @@ class OrderExecutor:
         })
 
         if self.demo_mode:
-            # Default to Mock Trading (Demo) as it's the current Binance standard.
-            # This handles both keys with 'demo_' prefix and modern demo keys correctly.
-            self.exchange.enable_demo_trading(True)
-            logger.info("Order Executor initialized in Demo/Mock Trading mode")
+            logger.info("Order Executor initialized in DEMO mode")
         else:
             logger.warning("Order Executor initialized in LIVE mode - REAL MONEY!")
 
@@ -135,32 +132,23 @@ class OrderExecutor:
     def _execute_demo_orders(self, symbol: str, side: str, quantity: float, sl_price: float, tp_price: float):
         self.set_leverage(symbol, settings.LEVERAGE)
 
-        # Use self.exchange (CCXT) for all orders in demo mode too
-        # This handles Binance "Demo Trading" correctly
-        order = self.exchange.create_order(
-            symbol=symbol,
-            type='market',
-            side=side,
-            amount=quantity
-        )
+        order = self.futures_client.create_market_order(symbol, side, quantity)
         logger.info(f"Demo market order executed: {order['id']}")
 
         close_side = 'sell' if side == 'buy' else 'buy'
-        sl_order = self.exchange.create_order(
-            symbol=symbol,
-            type='stop_market',
-            side=close_side,
-            amount=quantity,
-            params={'stopPrice': sl_price}
+        sl_order = self.futures_client.create_close_algo_order(
+            symbol,
+            close_side,
+            'STOP_MARKET',
+            sl_price,
         )
         logger.info(f"Demo stop loss placed: {sl_order['id']}")
 
-        tp_order = self.exchange.create_order(
-            symbol=symbol,
-            type='take_profit_market',
-            side=close_side,
-            amount=quantity,
-            params={'stopPrice': tp_price}
+        tp_order = self.futures_client.create_close_algo_order(
+            symbol,
+            close_side,
+            'TAKE_PROFIT_MARKET',
+            tp_price,
         )
         logger.info(f"Demo take profit placed: {tp_order['id']}")
 
@@ -217,14 +205,8 @@ class OrderExecutor:
             logger.info(f"{'[DEMO]' if self.demo_mode else '[LIVE]'} Executing {side.upper()} order for {symbol}")
             logger.info(f"Entry: ${entry_price}, SL: ${sl_price}, TP: ${tp_price}, Qty: {quantity}")
 
-            # Ensure leverage is set
-            self.set_leverage(symbol, settings.LEVERAGE)
-
-            # Round quantity to exchange precision
-            self.exchange.load_markets()
-            quantity = float(self.exchange.amount_to_precision(symbol, quantity))
-
             if self.demo_mode:
+                quantity = float(self.futures_client.format_quantity(symbol, quantity))
                 order, sl_order, tp_order = self._execute_demo_orders(
                     symbol,
                     side,
@@ -233,6 +215,12 @@ class OrderExecutor:
                     tp_price,
                 )
             else:
+                self.set_leverage(symbol, settings.LEVERAGE)
+                
+                # Round quantity to exchange precision
+                self.exchange.load_markets()
+                quantity = float(self.exchange.amount_to_precision(symbol, quantity))
+                
                 # Place market order
                 order = self.exchange.create_order(
                     symbol=symbol,
@@ -360,8 +348,11 @@ class OrderExecutor:
             if self._is_simulated_position(position):
                 order = {'id': f"{position.order_id}_CLOSE", 'average': float(position.entry_price)}
                 logger.info(f"[SIMULATION] Position closed: {order['id']} - {reason}")
+            elif self.demo_mode:
+                order = self.futures_client.create_market_order(symbol, side, quantity, reduce_only=True)
+                order['average'] = self.futures_client.get_price(symbol)
             else:
-                # Use self.exchange (CCXT) for all modes
+                # Use self.exchange (CCXT) for live modes
                 order = self.exchange.create_order(
                     symbol=symbol,
                     type='market',
@@ -383,9 +374,15 @@ class OrderExecutor:
             # Cancel SL and TP orders
             try:
                 if position.sl_order_id and not self._is_simulated_order_id(position.sl_order_id):
-                    self.exchange.cancel_order(position.sl_order_id, symbol)
+                    if self.demo_mode:
+                        self.futures_client.cancel_order(symbol, position.sl_order_id)
+                    else:
+                        self.exchange.cancel_order(position.sl_order_id, symbol)
                 if position.tp_order_id and not self._is_simulated_order_id(position.tp_order_id):
-                    self.exchange.cancel_order(position.tp_order_id, symbol)
+                    if self.demo_mode:
+                        self.futures_client.cancel_order(symbol, position.tp_order_id)
+                    else:
+                        self.exchange.cancel_order(position.tp_order_id, symbol)
             except Exception as e:
                 logger.warning(f"Error canceling orders: {e}")
             

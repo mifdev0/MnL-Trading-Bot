@@ -41,12 +41,7 @@ class PositionManager:
         self.price_error_logged_at = {}
         
         if settings.BINANCE_TESTNET:
-            # Default to Mock Trading (Demo) as it's the current Binance standard.
-            # Only use standalone testnet if the key specifically looks like a legacy testnet key
-            # (which usually doesn't have the 'demo_' prefix and the user knows what they're doing).
-            # But for stability, enable_demo_trading(True) is the way to go for most modern demo keys.
-            self.exchange.enable_demo_trading(True)
-            logger.info("Position Manager initialized in Demo/Mock Trading mode")
+            logger.info("Position Manager initialized in DEMO mode")
         else:
             logger.info("Position Manager initialized in LIVE mode")
 
@@ -65,7 +60,10 @@ class PositionManager:
             return
 
         try:
-            self.exchange.cancel_order(order_id, symbol)
+            if settings.BINANCE_TESTNET:
+                self.futures_client.cancel_order(symbol, order_id)
+            else:
+                self.exchange.cancel_order(order_id, symbol)
         except Exception as e:
             # If order is already canceled or not found, it's fine
             error_msg = str(e).lower()
@@ -81,7 +79,25 @@ class PositionManager:
             logger.info(f"[SIMULATION] {order_kind} updated for {position.pair}: {order_id}")
             return {'id': order_id}
 
-        # Use CCXT for all orders
+        if settings.BINANCE_TESTNET:
+            order_type = str(kwargs.get('type', '')).upper()
+            side = kwargs.get('side')
+            if order_type == 'STOP_MARKET':
+                stop_price = kwargs.get('params', {}).get('stopPrice')
+                return self.futures_client.create_close_algo_order(
+                    position.pair,
+                    side,
+                    'STOP_MARKET',
+                    stop_price,
+                )
+            if order_type == 'MARKET':
+                return self.futures_client.create_market_order(
+                    position.pair,
+                    side,
+                    kwargs.get('amount'),
+                    reduce_only=True,
+                )
+
         return self.exchange.create_order(**kwargs)
 
     def _log_price_error(self, symbol: str, error: Exception):
@@ -95,15 +111,21 @@ class PositionManager:
         if self._has_simulated_orders(position):
             return True
 
-        try:
-            # Use CCXT fetch_position
-            positions = self.exchange.fetch_positions([position.pair])
-            for p in positions:
-                if p['symbol'] == position.pair:
-                    return abs(float(p['contracts'])) > 0
-        except Exception as e:
-            logger.warning(f"Error checking position on exchange: {e}")
-            return True # Assume open on error to avoid premature local close
+        if not settings.BINANCE_TESTNET:
+            try:
+                # Use CCXT fetch_position
+                positions = self.exchange.fetch_positions([position.pair])
+                for p in positions:
+                    if p['symbol'] == position.pair:
+                        return abs(float(p['contracts'])) > 0
+            except Exception as e:
+                logger.warning(f"Error checking position on exchange: {e}")
+                return True # Assume open on error to avoid premature local close
+            return False
+
+        exchange_position = self.futures_client.get_position(position.pair)
+        if exchange_position:
+            return abs(float(exchange_position.get('positionAmt', 0))) > 0
 
         return False
 
@@ -143,13 +165,23 @@ class PositionManager:
         Get current market price for a symbol
         """
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
-            return float(ticker['last'])
+            if settings.BINANCE_TESTNET:
+                return self.futures_client.get_price(symbol)
+
+            market_symbol = symbol.split(':')[0].replace('/', '')
+            response = requests.get(
+                f'{self.market_base_url}/fapi/v1/ticker/price',
+                params={'symbol': market_symbol},
+                timeout=10,
+                verify=True
+            )
+            response.raise_for_status()
+            return float(response.json()['price'])
         except Exception as e:
             self._log_price_error(symbol, e)
             try:
                 # Fallback to fetch_ohlcv if fetch_ticker fails
-                ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe='1m', limit=1)
+                ohlcv = self.market_exchange.fetch_ohlcv(symbol, timeframe='1m', limit=1)
                 if ohlcv:
                     return float(ohlcv[0][4]) # Close price
             except:
@@ -519,6 +551,10 @@ class PositionManager:
                                 
                                 if self._has_simulated_orders(position):
                                     logger.info(f"[SIM] Time Exit close: {position.pair}")
+                                elif settings.BINANCE_TESTNET:
+                                    self.futures_client.create_market_order(
+                                        position.pair, side, qty, reduce_only=True
+                                    )
                                 else:
                                     # Use CCXT instance (self.exchange) for all modes (Demo/Live/Testnet)
                                     # This is safer for Binance "Demo Trading" feature
@@ -562,15 +598,31 @@ class PositionManager:
         Sync local database with Binance positions
         """
         try:
-            # 1. Get all positions from Binance using CCXT
-            exchange_positions = self.exchange.fetch_positions()
-            active_exchange_pairs = {}
-            
-            for ep in exchange_positions:
-                amt = float(ep.get('contracts', 0))
-                if abs(amt) > 0:
-                    pair = ep['symbol']
-                    active_exchange_pairs[pair] = ep
+            if settings.BINANCE_TESTNET:
+                # 1. Get all positions from Binance
+                exchange_positions = self.futures_client.get_all_positions()
+                active_exchange_pairs = {}
+                
+                for ep in exchange_positions:
+                    amt = float(ep.get('positionAmt', 0))
+                    if abs(amt) > 0:
+                        pair = self.futures_client.to_ccxt_symbol(ep['symbol'])
+                        active_exchange_pairs[pair] = ep
+            else:
+                # 1. Get all positions from Binance using CCXT
+                exchange_positions = self.exchange.fetch_positions()
+                active_exchange_pairs = {}
+                
+                for ep in exchange_positions:
+                    amt = float(ep.get('contracts', 0))
+                    if abs(amt) > 0:
+                        pair = ep['symbol']
+                        active_exchange_pairs[pair] = {
+                            'positionAmt': ep.get('contracts'),
+                            'entryPrice': ep.get('entryPrice'),
+                            'leverage': ep.get('leverage'),
+                            'unRealizedProfit': ep.get('unrealizedPnl')
+                        }
 
             # 2. Update local database
             db = SessionLocal()
@@ -592,7 +644,7 @@ class PositionManager:
                     exists = any(lp.pair == pair for lp in local_positions)
                     if not exists:
                         logger.info(f"Syncing new position from exchange: {pair}")
-                        amt = float(ep['contracts'])
+                        amt = float(ep['positionAmt'])
                         side = 'LONG' if amt > 0 else 'SHORT'
                         
                         new_pos = Position(
@@ -605,7 +657,7 @@ class PositionManager:
                             leverage=int(ep.get('leverage', 1)),
                             status='OPEN',
                             ai_reason="Synced from exchange",
-                            pnl=Decimal(str(ep.get('unrealizedPnl', 0)))
+                            pnl=Decimal(str(ep.get('unRealizedProfit', 0)))
                         )
                         db.add(new_pos)
                 
