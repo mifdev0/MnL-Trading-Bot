@@ -19,17 +19,21 @@ logger = logging.getLogger(__name__)
 class BinanceFuturesClient:
     def __init__(self, demo_mode: bool = True):
         self.demo_mode = demo_mode
-        # If using Demo Trading (Main Site), the endpoint is actually fapi.binance.com
-        # testnet.binancefuture.com is only for the OLD standalone Testnet site.
-        # However, BinanceFuturesClient is mostly a legacy REST wrapper here.
-        # We'll default to fapi but allow testnet if specifically configured.
-        self.base_url = (
-            "https://fapi.binance.com"
-            if settings.BINANCE_API_KEY.startswith("demo_") or not demo_mode
-            else "https://testnet.binancefuture.com"
-        )
-        # Force CCXT to be the primary for orders in PositionManager/OrderExecutor anyway.
-        self.verify_ssl = True # Always verify for fapi
+        # Binance has 3 environments now:
+        # 1. LIVE: fapi.binance.com
+        # 2. NEW DEMO: demo-api.binance.com (Keys usually start with 'demo_')
+        # 3. OLD TESTNET: testnet.binancefuture.com (Standalone site)
+        
+        if not demo_mode:
+            self.base_url = "https://fapi.binance.com"
+        elif settings.BINANCE_API_KEY.startswith("demo_"):
+            self.base_url = "https://demo-api.binance.com"
+        else:
+            # Fallback to standalone testnet for legacy keys
+            self.base_url = "https://testnet.binancefuture.com"
+            
+        logger.info(f"Binance Futures Client initialized with base URL: {self.base_url}")
+        self.verify_ssl = True
         self._exchange_info = None
 
         if "testnet" in self.base_url:
