@@ -32,19 +32,10 @@ class OrderExecutor:
         })
 
         if self.demo_mode:
-            # Robust demo mode detection
-            is_mock_trading = settings.BINANCE_API_KEY.startswith("demo_")
-            if is_mock_trading:
-                self.exchange.enable_demo_trading(True)
-                logger.info("Order Executor initialized in Mock Trading (Production Demo) mode")
-            else:
-                # Standalone Testnet: CCXT has deprecated set_sandbox_mode(True) for futures.
-                # We override URLs manually to maintain support for legacy testnet keys.
-                self.exchange.urls['api']['fapiPublic'] = 'https://testnet.binancefuture.com/fapi/v1'
-                self.exchange.urls['api']['fapiPrivate'] = 'https://testnet.binancefuture.com/fapi/v1'
-                self.exchange.urls['api']['fapiData'] = 'https://testnet.binancefuture.com/futures/data'
-                self.exchange.urls['api']['fapiPrivateV2'] = 'https://testnet.binancefuture.com/fapi/v2'
-                logger.info("Order Executor initialized in Standalone Testnet mode (Manual URL Override)")
+            # Default to Mock Trading (Demo) as it's the current Binance standard.
+            # This handles both keys with 'demo_' prefix and modern demo keys correctly.
+            self.exchange.enable_demo_trading(True)
+            logger.info("Order Executor initialized in Demo/Mock Trading mode")
         else:
             logger.warning("Order Executor initialized in LIVE mode - REAL MONEY!")
 
