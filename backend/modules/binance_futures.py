@@ -28,16 +28,31 @@ class BinanceFuturesClient:
             self.base_url = "https://fapi.binance.com"
         else:
             # According to user's dashboard: Futures Demo API Base Endpoint: https://demo-fapi.binance.com
-            # This is the modern "Mock Trading" environment.
             self.base_url = "https://demo-fapi.binance.com"
             
-        logger.info(f"Binance Futures Client initialized with base URL: {self.base_url}")
+        masked_key = f"{settings.BINANCE_API_KEY[:4]}...{settings.BINANCE_API_KEY[-4:]}" if settings.BINANCE_API_KEY else "NONE"
+        logger.info(f"DEBUG: Initializing BinanceFuturesClient")
+        logger.info(f"DEBUG: Demo Mode: {demo_mode}")
+        logger.info(f"DEBUG: Base URL: {self.base_url}")
+        logger.info(f"DEBUG: API Key: {masked_key}")
+        
         self.verify_ssl = True
         self._exchange_info = None
 
         if "testnet" in self.base_url:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             self.verify_ssl = False
+            
+        # Test connection immediately
+        try:
+            self.test_connection()
+            logger.info("✅ Binance Futures connection verified")
+        except Exception as e:
+            logger.error(f"❌ Binance Futures connection failed: {e}")
+
+    def test_connection(self):
+        """Test API key by fetching account info"""
+        return self.signed_request("GET", "/fapi/v2/account")
 
     def to_market_symbol(self, symbol: str) -> str:
         return symbol.split(":")[0].replace("/", "")
@@ -60,13 +75,17 @@ class BinanceFuturesClient:
     def signed_request(self, method: str, path: str, params: dict | None = None):
         params = dict(params or {})
         params["timestamp"] = int(time.time() * 1000)
+        params["recvWindow"] = 60000 # Increase window to 60s
+        
         query = urlencode(params)
         signature = hmac.new(
             settings.BINANCE_SECRET_KEY.encode(),
             query.encode(),
             hashlib.sha256,
         ).hexdigest()
+        
         url = f"{self.base_url}{path}?{query}&signature={signature}"
+        
         response = requests.request(
             method,
             url,
@@ -81,6 +100,9 @@ class BinanceFuturesClient:
             payload = response.text
 
         if response.status_code >= 400:
+            logger.error(f"DEBUG: Request failed. URL: {self.base_url}{path}")
+            logger.error(f"DEBUG: Response Status: {response.status_code}")
+            logger.error(f"DEBUG: Response Body: {payload}")
             raise RuntimeError(f"Binance {method} {path} failed: {response.status_code} {payload}")
 
         if isinstance(payload, dict):
