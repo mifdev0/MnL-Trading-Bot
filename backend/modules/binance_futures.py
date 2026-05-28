@@ -19,16 +19,22 @@ logger = logging.getLogger(__name__)
 class BinanceFuturesClient:
     def __init__(self, demo_mode: bool = True):
         self.demo_mode = demo_mode
+        # If using Demo Trading (Main Site), the endpoint is actually fapi.binance.com
+        # testnet.binancefuture.com is only for the OLD standalone Testnet site.
+        # However, BinanceFuturesClient is mostly a legacy REST wrapper here.
+        # We'll default to fapi but allow testnet if specifically configured.
         self.base_url = (
-            "https://testnet.binancefuture.com"
-            if demo_mode
-            else "https://fapi.binance.com"
+            "https://fapi.binance.com"
+            if settings.BINANCE_API_KEY.startswith("demo_") or not demo_mode
+            else "https://testnet.binancefuture.com"
         )
-        self.verify_ssl = not demo_mode
+        # Force CCXT to be the primary for orders in PositionManager/OrderExecutor anyway.
+        self.verify_ssl = True # Always verify for fapi
         self._exchange_info = None
 
-        if demo_mode:
+        if "testnet" in self.base_url:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            self.verify_ssl = False
 
     def to_market_symbol(self, symbol: str) -> str:
         return symbol.split(":")[0].replace("/", "")
