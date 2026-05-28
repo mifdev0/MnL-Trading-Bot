@@ -376,9 +376,10 @@ class AISignalEngine:
     
     def _build_analysis_prompt(self, symbol: str, indicators: Dict, sentiment: str, htf_trend: str, news_context: str) -> str:
         """
-        Build analysis prompt for AI including HTF, Combined Sentiment and News Headlines
+        Build analysis prompt for AI including HTF, Combined Sentiment and News Headlines, specifically for 15m BTC trading.
         """
-        prompt = f"""Trading analysis for {symbol}:
+        prompt = f"""You are an elite AI trading algorithm focused strictly on Bitcoin (BTC) in the 15-minute (15m) timeframe.
+Analyze the following technical indicators and context for {symbol}:
 PRICE: ${indicators['price']}
 RSI: {indicators['rsi']} ({indicators['rsi_zone']})
 TREND (15m): {indicators['ema_trend']}

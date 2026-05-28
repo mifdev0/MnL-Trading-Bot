@@ -39,97 +39,10 @@ class MarketScanner:
     
     def get_candidate_pairs(self) -> List[str]:
         """
-        Scan and filter trading pairs based on:
-        - Volume 24h > MIN_VOLUME_24H
-        - Volatility > MIN_VOLATILITY
-        - Exclude stablecoin pairs
-        
-        Returns:
-            List of candidate pair symbols
+        Hardcoded to return only Bitcoin for focused 15m trading strategy.
         """
-        try:
-            logger.info("Starting market scan...")
-            
-            # Fetch all tickers with retry
-            max_retries = 3
-            tickers = None
-            
-            for attempt in range(max_retries):
-                try:
-                    tickers = self._fetch_tickers()
-                    break
-                except Exception as e:
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Retry {attempt + 1}/{max_retries} fetching tickers: {e}")
-                        import time
-                        time.sleep(2)
-                    else:
-                        raise
-            
-            if not tickers:
-                logger.error("Failed to fetch tickers")
-                return []
-            
-            candidates = []
-            
-            # Stablecoin pairs to exclude
-            stablecoin_patterns = ['USDC', 'BUSD', 'TUSD', 'USDP', 'DAI']
-            
-            for symbol, ticker in tickers.items():
-                # Only USDT perpetual futures
-                if not symbol.endswith('/USDT:USDT'):
-                    continue
-                
-                # Skip stablecoin pairs
-                base = symbol.split('/')[0]
-                if any(stable in base for stable in stablecoin_patterns):
-                    continue
-                
-                # Check volume
-                volume_usd = float(ticker.get('quoteVolume', 0) or 0)
-                if volume_usd < settings.MIN_VOLUME_24H:
-                    continue
-                
-                # Calculate volatility (high-low range as % of close)
-                high = float(ticker.get('high', 0) or 0)
-                low = float(ticker.get('low', 0) or 0)
-                close = float(ticker.get('close', 0) or 0)
-                
-                if close == 0:
-                    continue
-                
-                volatility = ((high - low) / close) * 100
-                
-                if volatility < settings.MIN_VOLATILITY:
-                    continue
-                
-                # Passed all filters
-                candidates.append({
-                    'symbol': symbol,
-                    'volume_24h': volume_usd,
-                    'volatility': round(volatility, 2),
-                    'price': close
-                })
-            
-            # Sort by volume (highest first)
-            candidates.sort(key=lambda x: x['volume_24h'], reverse=True)
-            
-            logger.info(f"Found {len(candidates)} candidate pairs")
-            
-            # Return only symbols
-            return [c['symbol'] for c in candidates[:15]]  # Top 15 by volume
-            
-        except Exception as e:
-            logger.error(f"Error scanning market: {e}")
-            # Return some default popular pairs as fallback
-            logger.info("Using fallback pairs: BTC, ETH, BNB, SOL, XRP")
-            return [
-                'BTC/USDT:USDT',
-                'ETH/USDT:USDT',
-                'BNB/USDT:USDT',
-                'SOL/USDT:USDT',
-                'XRP/USDT:USDT'
-            ]
+        logger.info("Market Scanner: Locked to BTC/USDT:USDT only.")
+        return ['BTC/USDT:USDT']
 
     def _fetch_tickers(self) -> Dict:
         if not self.testnet_mode:
