@@ -529,6 +529,7 @@ Rule: Signal LONG/SHORT only if confidence >= 70.
         Analyze multiple pairs and generate signals in parallel
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time
         
         signals = []
         max_workers = min(len(pairs), 5) # Limit concurrent calls to 5
@@ -549,6 +550,7 @@ Rule: Signal LONG/SHORT only if confidence >= 70.
                     logger.error(f"Error analyzing {pair}: {e}")
                     continue
         
+        time.sleep(0.5)
         return signals
 
 

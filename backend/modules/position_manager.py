@@ -536,13 +536,50 @@ class PositionManager:
                     
                     if duration_hours >= settings.TIME_EXIT_HOURS:
                         if current_pnl < settings.TIME_EXIT_MIN_PNL:
-                            logger.info(f"⏱ Time Exit triggered for {position.pair}: {duration_hours:.1f}h, PnL=${current_pnl:.2f}")
-                            from modules.telegram_bot import notify
-                            notify(f"⏱ *Time Exit*\nPair: `{position.pair}`\nDurasi: {duration_hours:.1f} jam\nPnL: `${current_pnl:.2f}`")
-                            from modules.order_executor import OrderExecutor
-                            executor = OrderExecutor()
-                            executor.close_position(position, "Time Exit")
-                            return
+                            # Close via futures_client langsung (demo-safe)
+                            try:
+                                side = 'sell' if position.side == 'LONG' else 'buy'
+                                qty = float(position.quantity)
+                                
+                                if self._has_simulated_orders(position):
+                                    logger.info(f"[SIM] Time Exit close: {position.pair}")
+                                elif settings.BINANCE_TESTNET:
+                                    self.futures_client.create_market_order(
+                                        position.pair, side, qty, reduce_only=True
+                                    )
+                                else:
+                                    self.exchange.create_order(
+                                        symbol=position.pair,
+                                        type='market',
+                                        side=side,
+                                        amount=qty
+                                    )
+                                
+                                # Update DB
+                                from database import SessionLocal
+                                from decimal import Decimal
+                                db = SessionLocal()
+                                try:
+                                    db_pos = db.query(Position).get(position.id)
+                                    if db_pos:
+                                        db_pos.status = 'CLOSED'
+                                        db_pos.closed_at = datetime.now()
+                                        db_pos.pnl = Decimal(str(current_pnl))
+                                    db.commit()
+                                except Exception as e:
+                                    db.rollback()
+                                    logger.error(f"DB error on time exit: {e}")
+                                finally:
+                                    db.close()
+                                    
+                                from modules.telegram_bot import notify
+                                notify(f"⏱ *Time Exit Executed*\nPair: `{position.pair}`\nDurasi: {duration_hours:.1f} jam\nPnL: `${current_pnl:.2f}`")
+                                logger.info(f"Time Exit closed: {position.pair} PnL=${current_pnl:.2f}")
+                                return
+                                
+                            except Exception as e:
+                                logger.error(f"Time Exit close failed for {position.pair}: {e}")
+                                return
             
         except Exception as e:
             logger.error(f"Error managing position {position.pair}: {e}")
