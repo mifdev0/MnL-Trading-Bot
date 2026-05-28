@@ -38,8 +38,13 @@ class OrderExecutor:
                 self.exchange.enable_demo_trading(True)
                 logger.info("Order Executor initialized in Mock Trading (Production Demo) mode")
             else:
-                self.exchange.set_sandbox_mode(True)
-                logger.info("Order Executor initialized in Standalone Testnet mode")
+                # Standalone Testnet: CCXT has deprecated set_sandbox_mode(True) for futures.
+                # We override URLs manually to maintain support for legacy testnet keys.
+                self.exchange.urls['api']['fapiPublic'] = 'https://testnet.binancefuture.com/fapi/v1'
+                self.exchange.urls['api']['fapiPrivate'] = 'https://testnet.binancefuture.com/fapi/v1'
+                self.exchange.urls['api']['fapiData'] = 'https://testnet.binancefuture.com/futures/data'
+                self.exchange.urls['api']['fapiPrivateV2'] = 'https://testnet.binancefuture.com/fapi/v2'
+                logger.info("Order Executor initialized in Standalone Testnet mode (Manual URL Override)")
         else:
             logger.warning("Order Executor initialized in LIVE mode - REAL MONEY!")
 
